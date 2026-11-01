@@ -58,8 +58,6 @@ run "cat /opt/ikuai-bypass/.version"
 run "grep -cE '^  - name:' /opt/ikuai-bypass/config.yml"
 run "grep -E '^(mode|run-mode|proxy|MaxNumberOfOneRecords|ikuai-url-ignore-cert):' /opt/ikuai-bypass/config.yml || echo NO_44_ONLY_KEYS"
 run "grep -o IKB_MODULE /etc/init.d/ikuai-bypass | head -n 1"
-run {/opt/ikuai-bypass/ikuai-bypass -r once -m ii -c /opt/ikuai-bypass/config.yml > /tmp/ikb.out 2>&1 & sleep 8; killall -q ikuai-bypass; head -n 8 /tmp/ikb.out}
-run "grep -c . /tmp/ikb.out"
 run "grep -n 'enable-update' /opt/ikuai-bypass/config.yml"
 run {logread | grep -i ikuai | tail -n 15}
 run {ubus call service list '{"name":"ikuai-bypass"}' 2>&1 | head -c 800; echo}
@@ -100,6 +98,8 @@ run "apk info | tr '\\n' ' ' | cut -c1-600"
 run "/etc/openclash/core/clash_meta -v"
 run "uci get luci.main.mediaurlbase"
 run "uname -n"
+run {/opt/ikuai-bypass/ikuai-bypass -r once -m ii -c /opt/ikuai-bypass/config.yml > /tmp/ikb.out 2>&1 & sleep 8; killall -q ikuai-bypass; head -n 8 /tmp/ikb.out}
+run "grep -c . /tmp/ikb.out"
 run "echo ===SMOKE_END==="
 
 set timeout 180
