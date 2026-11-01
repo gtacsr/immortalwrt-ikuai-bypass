@@ -87,6 +87,15 @@ if [ -f /etc/openclash/core/clash_meta ]; then
 fi
 
 # ========================================================
+# 8.5 open-vm-tools（ESXi 客户机工具，构建时从 24.10 源注入）
+# ========================================================
+if [ -x /etc/init.d/open-vm-tools ]; then
+  /etc/init.d/open-vm-tools enable  >/dev/null 2>&1 || true
+  /etc/init.d/open-vm-tools start   >/dev/null 2>&1 || true
+  echo "open-vm-tools 已启用"
+fi
+
+# ========================================================
 # 9. 只跑一次：执行完自我删除，避免每次开机重跑覆盖手工配置
 # ========================================================
 echo "===== $(date '+%F %T') 初始化完成，删除首次开机脚本 ====="
