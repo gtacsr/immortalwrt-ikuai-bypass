@@ -21,6 +21,16 @@ fail() {
 	exit 1
 }
 
+# Why/为什么: 本镜像把 CLI 钉死在 v4.2.0（官方说明里兼容爱快 3.x 的最后一个稳定版）。
+# 在线安装/更新会拉 4.4.x，对爱快 3.x 不兼容，因此这里硬拦，避免在 LuCI 上误点。
+# 确需放行：手动执行时带 IKB_ALLOW_UPGRADE=1。
+guard_upgrade() {
+	if [ "${IKB_ALLOW_UPGRADE:-0}" = "1" ]; then
+		return 0
+	fi
+	fail "本镜像已锁定 iKuai Bypass v4.2.0（兼容爱快 3.x）。在线安装/更新会拉取 4.4.x，对爱快 3.x 不兼容，此操作已禁用；手动恢复见 /opt/ikuai-bypass/VERSION-PIN.txt（确需放行：IKB_ALLOW_UPGRADE=1）"
+}
+
 export_proxy() {
 	proxy="${IKB_PROXY:-}"
 	[ -n "${proxy}" ] || return 0
@@ -118,6 +128,7 @@ case "${1:-status}" in
 		printf 'status=ok\nmessage=Moved to Lua controller\n'
 		;;
 	luci-update)
+		guard_upgrade
 		printf '[IKB] 1/4 正在配置网络代理...\n'
 		export_proxy
 		printf '[IKB] 2/4 正在下载最新插件包...\n'
@@ -143,6 +154,7 @@ case "${1:-status}" in
 		printf '[IKB] 3/3 解析完成\n'
 		;;
 	install)
+		guard_upgrade
 		printf '[IKB] 1/5 正在获取安装脚本...\n'
 		ensure_cache 0
 		export_proxy
@@ -167,6 +179,9 @@ case "${1:-status}" in
 		;;
 	status|update|uninstall|start|stop|restart|enable|disable|log)
 		action="$1"
+		if [ "${action}" = "update" ]; then
+			guard_upgrade
+		fi
 		shift
 		run_install_sh "${action}" "$@"
 		;;
