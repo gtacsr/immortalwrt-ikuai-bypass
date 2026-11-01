@@ -205,4 +205,4 @@ jobs:
             * 产物：`${{ env.IMG_NAME }}`（+ `.sha256`），与官方 x86/64 EFI 镜像同名同格式，直接写盘/U 盘启动。
             * 默认 LAN：**192.168.123.2/24**（`/24`，非 `/32`），DHCP/IPv6 RA 关闭。
             * 预装：iKuai Bypass（LuCI + x86_64 CLI + 19001 WebUI）、OpenClash + Mihomo `linux-amd64-v3` 内核 + 离线 GeoIP/GeoSite。
-            * 首次开机由 `uci-defaults` 自动初始化；日志见 `/tmp/setup.log`。
+            * 首次开机由 `uci-defaults` 自动初始化（**执行完自删除，只跑一次**，不会覆盖你后续手改的配置）；日志见 `/root/setup.log`。
