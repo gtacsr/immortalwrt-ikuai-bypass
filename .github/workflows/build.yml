@@ -134,34 +134,43 @@ jobs:
         run: |
           set -euo pipefail
           cd ib
-          PKGS="base-files ca-bundle dropbear e2fsprogs firewall4 fstools \
+          # 注意：v3 起保留 e1000/e1000e/igb 驱动（ESXi 默认网卡是 E1000e，缺驱动会导致客机里只有 lo）
+          PKGS_CORE="base-files ca-bundle dropbear e2fsprogs firewall4 fstools \
           grub2-bios-setup kmod-button-hotplug kmod-nft-offload libc libgcc \
           libustream-mbedtls logd mtd netifd nftables odhcp6c odhcpd-ipv6only \
           partx-utils procd-ujail uci uclient-fetch urandom-seed urngd \
-          -kmod-amazon-ena -kmod-amd-xgbe -kmod-bnx2 -kmod-dmac-intel -kmod-e1000 \
-          -kmod-e1000e -kmod-forcedeth -kmod-igb -kmod-ixgbe -kmod-r8169 -kmod-tg3 \
+          -kmod-amazon-ena -kmod-amd-xgbe -kmod-bnx2 -kmod-dmac-intel \
+          -kmod-forcedeth -kmod-ixgbe -kmod-r8169 -kmod-tg3 \
           -kmod-drm-i915 qemu-ga luci luci-ssl luci-i18n-base-zh-cn \
           luci-app-attendedsysupgrade luci-i18n-attendedsysupgrade-zh-cn -ppp \
           -ppp-mod-pppoe -dnsmasq dnsmasq-full bash curl \
           ca-certificates coreutils coreutils-nohup ip-full ipset kmod-tun \
           kmod-inet-diag kmod-nft-tproxy kmod-nft-nat unzip tar bind-dig \
           luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn \
-          luci-compat luci-lua-runtime luci-app-openclash -luci-theme-bootstrap"
+          luci-compat luci-lua-runtime -luci-theme-bootstrap"
 
           echo "== 预设文件自检 =="
           grep -n '192.168.123.2' files/etc/uci-defaults/99-custom-setup.sh || true
           grep -n 'nexthop' files/opt/ikuai-bypass/config.yml || true
 
-          if make image PROFILE=generic PACKAGES="$PKGS" FILES="files" > /tmp/build.log 2>&1; then
-            echo "== 编译成功（完整包清单）=="
-          else
-            echo "::warning::完整包清单编译失败，剔除 luci-app-openclash 后重试（插件文件已手工注入）"
-            tail -n 40 /tmp/build.log || true
-            PKGS2=$(echo "$PKGS" | sed 's/ *luci-app-openclash//g')
-            make image PROFILE=generic PACKAGES="$PKGS2" FILES="files" > /tmp/build.log 2>&1 || {
-              tail -n 80 /tmp/build.log; exit 1; }
-            echo "== 编译成功（剔除 luci-app-openclash）=="
-          fi
+          # 逐级降级：附加驱动/工具 -> 去掉 open-vm-tools -> 去掉全部附加包 -> 去掉 openclash
+          EXTRA_SETS=("kmod-e1000 kmod-e1000e kmod-igb open-vm-tools" \
+                      "kmod-e1000 kmod-e1000e kmod-igb" \
+                      "")
+          OC_SETS=("luci-app-openclash" "")
+          ok=0; used=""
+          for extra in "${EXTRA_SETS[@]}"; do
+            for oc in "${OC_SETS[@]}"; do
+              echo "== 尝试: extra=[$extra] oc=[$oc] =="
+              if make image PROFILE=generic PACKAGES="$PKGS_CORE $extra $oc" FILES="files" > /tmp/build.log 2>&1; then
+                ok=1; used="extra=[$extra] oc=[$oc]"; break 2
+              fi
+              echo "::warning::该组合失败，降级重试"
+              grep -iE 'unknown package|Package .* is not available|Error [0-9]|No space left' /tmp/build.log | tail -n 10 || tail -n 15 /tmp/build.log || true
+            done
+          done
+          [ "$ok" -eq 1 ] || { echo "::error::所有包组合均编译失败"; tail -n 80 /tmp/build.log; exit 1; }
+          echo "== 编译成功 $used =="
           tail -n 12 /tmp/build.log
           ls -lh bin/targets/x86/64/
 
