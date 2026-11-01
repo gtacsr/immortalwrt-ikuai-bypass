@@ -32,7 +32,11 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq build-essential libncurses-dev zlib1g-dev gawk git \
-            gettext libssl-dev xsltproc wget curl unzip zstd jq rsync file ca-certificates binutils
+            gettext libssl-dev xsltproc wget curl unzip zstd jq rsync file ca-certificates \
+            binutils qemu-utils genisoimage mtools dosfstools
+          # 25.12 的 x86 target 默认还会产出 qcow2/vdi/vmdk/vhdx 变体（需要 qemu-img）与 ISO（需要 mkisofs）
+          sudo ln -sf /usr/bin/genisoimage /usr/bin/mkisofs || true
+          qemu-img --version | head -n1
 
       - name: 下载官方 ImageBuilder
         env:
