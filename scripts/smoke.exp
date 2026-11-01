@@ -67,6 +67,9 @@ run {/etc/init.d/ikuai-bypass stop; sleep 1; ps w | grep "[i]kuai-bypass" | wc -
 run {/etc/init.d/ikuai-bypass start; sleep 8; ps w | grep "[i]kuai-bypass" | head -n 5}
 run {(ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo STILL_NO_PORT}
 run {sh -x /etc/init.d/ikuai-bypass start 2>&1 | tail -n 30}
+run {sh -x /etc/rc.common /etc/init.d/ikuai-bypass start 2>&1 | tail -n 45}
+run {IKB_RUN_IPV6=0 /etc/init.d/ikuai-bypass start; sleep 6; ps w | grep "[c]ronAft" | head -n 2; (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo NO_IPV6_VARIANT_PORT}
+run {logread 2>/dev/null | tail -n 8}
 run {sleep 5; ps w | grep "[c]ronAft" | head -n 3; (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo NO_PORT_AFTER_TRACE}
 run {head -n 4 /etc/rc.common}
 run {echo "SHELL=$SHELL"; ls -l /etc/init.d/ikuai-bypass}
