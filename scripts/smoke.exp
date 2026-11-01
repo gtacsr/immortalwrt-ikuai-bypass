@@ -1,7 +1,8 @@
 #!/usr/bin/expect -f
 # 用法: smoke.exp <raw.img> [-enable-kvm -cpu host | -accel tcg -cpu max]
-# 注意：ImmortalWrt 的 /etc/config/system 里 ttylogin='0'，控制台 shell 在 rcS 之前就可用，
-#       所以必须先轮询等待 uci-defaults provisioning 完成，不能立刻取样。
+# 两个必须处理的点：
+#  1) 串口是 inittab askfirst：先回车激活控制台，再按需登录（root 空密码）
+#  2) 控制台 shell 在 rcS 之前就到手，必须轮询等 uci-defaults provisioning 落地后再取样
 set timeout 900
 set img [lindex $argv 0]
 set accelargs [lrange $argv 1 end]
@@ -19,19 +20,21 @@ spawn qemu-system-x86_64 {*}$accelargs -m 2048 -smp 2 \
   -nographic -no-reboot
 
 expect {
-  -re "# $"    { puts "\n###SHELL_OK###" }
-  -re "login:" { send "root\r"; exp_continue }
-  eof          { puts "\n###EXIT_BEFORE_SHELL###"; exit 2 }
-  timeout      { puts "\n###TIMEOUT_SHELL###"; exit 3 }
+  -re "press Enter" { send "\r"; exp_continue }
+  -re "login:"      { send "root\r"; exp_continue }
+  -re "Password:"   { send "\r"; exp_continue }
+  -re "# $"         { puts "\n###SHELL_OK###" }
+  eof               { puts "\n###EXIT_BEFORE_SHELL###"; exit 2 }
+  timeout           { puts "\n###TIMEOUT_SHELL###"; exit 3 }
 }
 
 set timeout 120
 run "echo ===SMOKE_START==="
 run "cat /proc/uptime"
 
-# 等待首次开机 provisioning 落地（最多约 5 分钟 guest 时间）
+# 等首次开机 provisioning：LAN 变成 192.168.123.2/24 即视为完成（最多约 3 分钟 guest 时间）
 set timeout 900
-run {i=0; while [ $i -lt 100 ]; do [ "$(uci -q get network.lan.ipaddr)" = "192.168.123.2/24" ] && { echo BOOT_PROVISIONED_I=$i; break; }; i=$((i+1)); sleep 3; done; echo WAIT_LOOP_END}
+run {i=0; while [ $i -lt 60 ]; do v=$(uci -q get network.lan.ipaddr); [ "$v" = "192.168.123.2/24" ] && { echo BOOT_PROVISIONED_I=$i; break; }; [ $((i % 5)) -eq 0 ] && echo "poll i=$i ip=$v"; i=$((i+1)); sleep 3; done; echo WAIT_LOOP_END ip=$(uci -q get network.lan.ipaddr)}
 
 set timeout 120
 run "cat /proc/uptime"
