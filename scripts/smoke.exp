@@ -63,6 +63,7 @@ run "grep -c . /tmp/ikb.out"
 run "grep -n 'enable-update' /opt/ikuai-bypass/config.yml"
 run {logread | grep -i ikuai | tail -n 15}
 run {ubus call service list '{"name":"ikuai-bypass"}' 2>&1 | head -c 800; echo}
+run {echo "=== MAIN LOG ==="; cat /tmp/ikuai-bypass-main.log 2>/dev/null | tail -n 10}
 run "curl -s -o /dev/null -w PANEL=%{http_code} http://127.0.0.1:19001/"
 run "curl -s -o /dev/null -w CONFIG_API=%{http_code} http://127.0.0.1:19001/api/config"
 run {/etc/init.d/ikuai-bypass stop; sleep 1; ps w | grep "[i]kuai-bypass" | wc -l}
