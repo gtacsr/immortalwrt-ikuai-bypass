@@ -40,6 +40,8 @@ set timeout 120
 run "cat /proc/uptime"
 run "ls -l /etc/uci-defaults/99-custom-setup.sh 2>&1"
 run "cat /root/setup.log 2>&1 | tail -n 30"
+run "ls -l /root/setup.log"
+run "df -h / | tail -n 2"
 run "uci show network | grep -E 'lan\\.(ipaddr|gateway|dns|proto)'"
 run "uci get dhcp.lan.ignore"
 run "grep -n uci-defaults /etc/init.d/boot | head -5"
