@@ -74,7 +74,7 @@ run "grep -o 'ikb-install-btn,button' /usr/lib/lua/luci/view/ikuai_bypass/status
 run "ls -l /opt/ikuai-bypass/ikuai-bypass"
 run "/opt/ikuai-bypass/ikuai-bypass -v 2>&1 | head -n 2; /opt/ikuai-bypass/ikuai-bypass --version 2>&1 | head -n 2"
 run "grep -E 'port|user|enable' /opt/ikuai-bypass/config.yml | head -n 6"
-run "sleep 6; (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo NO_PORT_19001"
+run "/etc/init.d/ikuai-bypass restart; sleep 8; (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo NO_PORT_19001"
 run "curl -s -m 8 -o /dev/null -w 'PANEL_HTTP=%{http_code}\n' http://127.0.0.1:19001/ || echo PANEL_CURL_FAIL"
 run "apk info -e luci-app-openclash && echo OC_PKG_OK"
 run "ls /lib/modules/*/e1000e.ko /lib/modules/*/e1000.ko /lib/modules/*/igb.ko /lib/modules/*/vmxnet3.ko 2>&1"
