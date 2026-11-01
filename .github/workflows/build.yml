@@ -1,0 +1,204 @@
+name: Build ImmortalWrt x86-64 EFI (iKuai Bypass)
+
+# 目标产物（固定文件名）：
+#   immortalwrt-25.12.2-x86-64-generic-ext4-combined-efi.img.gz
+# 默认 LAN: 192.168.123.2/24
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'ImmortalWrt 底包版本（必须与官方 ImageBuilder 版本一致）'
+        required: true
+        default: '25.12.2'
+      publish_release:
+        description: '构建成功后发布 Release（可直接下载，无需登录 GitHub 取 artifact）'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 编译 x86-64 generic ext4-combined-efi
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 准备构建环境
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential libncurses-dev zlib1g-dev gawk git \
+            gettext libssl-dev xsltproc wget curl unzip zstd jq rsync file ca-certificates binutils
+
+      - name: 下载官方 ImageBuilder
+        env:
+          IN_VER: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          VER="${IN_VER:-25.12.2}"
+          echo "VER=${VER}" >> "$GITHUB_ENV"
+          URL="https://downloads.immortalwrt.org/releases/${VER}/targets/x86/64/immortalwrt-imagebuilder-${VER}-x86-64.Linux-x86_64.tar.zst"
+          echo "构建引擎: $URL"
+          curl -fsSL --retry 5 --retry-delay 3 -o ib.tar.zst "$URL"
+          tar --zstd -xf ib.tar.zst
+          mv immortalwrt-imagebuilder-* ib
+          mkdir -p ib/files
+          ls ib
+
+      - name: 注入 iKuai Bypass（LuCI 面板 + x86_64 CLI 核心 + 离线缓存）
+        run: |
+          set -euo pipefail
+          mkdir -p ib/files/opt/ikuai-bypass/install-cache/install-file ib/files/etc/openclash/core
+          API=https://api.github.com/repos/joyanhui/ikuai-bypass/releases/latest
+
+          IPK_URL=$(curl -fsSL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$API" \
+            | jq -r '.assets[]?.browser_download_url' | grep -Ei 'luci.*\.ipk$' | head -n1 || true)
+          [ -n "${IPK_URL:-}" ] || IPK_URL="https://github.com/joyanhui/ikuai-bypass/releases/download/ikuai-bypass-v4.4.110/ikuai-bypass-luci-openwrt-all.ipk"
+          echo "LuCI 插件: $IPK_URL"
+          curl -fsSL --retry 3 -o /tmp/ikuai.ipk "$IPK_URL"
+          rm -rf /tmp/ikuai-x && mkdir -p /tmp/ikuai-x
+          tar -zxf /tmp/ikuai.ipk -C /tmp/ikuai-x 2>/dev/null || ( cd /tmp/ikuai-x && ar -x /tmp/ikuai.ipk )
+          if   [ -f /tmp/ikuai-x/data.tar.gz  ]; then tar -zxf /tmp/ikuai-x/data.tar.gz  -C ib/files/
+          elif [ -f /tmp/ikuai-x/data.tar.xz  ]; then tar -xf  /tmp/ikuai-x/data.tar.xz  -C ib/files/
+          elif [ -f /tmp/ikuai-x/data.tar.zst ]; then tar --zstd -xf /tmp/ikuai-x/data.tar.zst -C ib/files/
+          else echo "::error::iKuai Bypass ipk 解包失败"; ls -la /tmp/ikuai-x; exit 1; fi
+
+          CLI_URL=$(curl -fsSL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$API" \
+            | jq -r '.assets[]?.browser_download_url' | grep -Ei 'cli-linux-x86_64.*\.zip$' | head -n1 || true)
+          [ -n "${CLI_URL:-}" ] || CLI_URL="https://github.com/joyanhui/ikuai-bypass/releases/download/ikuai-bypass-v4.4.110/ikuai-bypass-cli-linux-x86_64.zip"
+          echo "CLI 核心: $CLI_URL"
+          curl -fsSL --retry 3 -o /tmp/cli.zip "$CLI_URL"
+          unzip -o /tmp/cli.zip -d ib/files/opt/ikuai-bypass/ >/dev/null
+          chmod +x ib/files/opt/ikuai-bypass/* 2>/dev/null || true
+          if [ -f ib/files/opt/ikuai-bypass/ikuai-bypass-cli-linux-x86_64 ]; then
+            mv -f ib/files/opt/ikuai-bypass/ikuai-bypass-cli-linux-x86_64 ib/files/opt/ikuai-bypass/ikuai-bypass
+          fi
+          file ib/files/opt/ikuai-bypass/ikuai-bypass || true
+
+          curl -fsSL --retry 3 -o ib/files/opt/ikuai-bypass/install-cache/install.sh \
+            "https://joyanhui.github.io/ikuai-bypass/install.sh" || true
+          curl -fsSL --retry 3 -o ib/files/opt/ikuai-bypass/install-cache/install-file/common.sh \
+            "https://joyanhui.github.io/ikuai-bypass/install-file/common.sh" || true
+          chmod +x ib/files/opt/ikuai-bypass/install-cache/install.sh \
+                   ib/files/opt/ikuai-bypass/install-cache/install-file/common.sh 2>/dev/null || true
+          echo "v4.4.110" > ib/files/opt/ikuai-bypass/.version
+
+          # 本仓库预设覆盖（含 192.168.123.2 的 network / bypass 配置），必须在 ipk 解包之后
+          cp -rf files/. ib/files/
+          chmod +x ib/files/etc/uci-defaults/* ib/files/etc/init.d/* ib/files/usr/libexec/* 2>/dev/null || true
+
+      - name: 注入 OpenClash（IPK + Mihomo Meta v3 内核 + 离线 Geo 库）
+        run: |
+          set -euo pipefail
+          mkdir -p ib/files/etc/openclash/core ib/files/etc/openclash/config
+
+          OC_API=https://api.github.com/repos/vernesong/OpenClash/releases/latest
+          OC_URL=$(curl -fsSL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$OC_API" \
+            | jq -r '.assets[]?.browser_download_url' | grep -Ei 'luci-app-openclash.*\.ipk$' | head -n1 || true)
+          [ -n "${OC_URL:-}" ] || OC_URL="https://github.com/vernesong/OpenClash/releases/download/v0.47.156/luci-app-openclash_0.47.156_all.ipk"
+          echo "OpenClash 插件: $OC_URL"
+          curl -fsSL --retry 3 -o /tmp/oc.ipk "$OC_URL"
+          rm -rf /tmp/oc-x && mkdir -p /tmp/oc-x
+          tar -zxf /tmp/oc.ipk -C /tmp/oc-x 2>/dev/null || ( cd /tmp/oc-x && ar -x /tmp/oc.ipk )
+          if   [ -f /tmp/oc-x/data.tar.gz  ]; then tar -zxf /tmp/oc-x/data.tar.gz  -C ib/files/
+          elif [ -f /tmp/oc-x/data.tar.xz  ]; then tar -xf  /tmp/oc-x/data.tar.xz  -C ib/files/
+          elif [ -f /tmp/oc-x/data.tar.zst ]; then tar --zstd -xf /tmp/oc-x/data.tar.zst -C ib/files/
+          else echo "::warning::OpenClash ipk 解包失败（将由官方源安装）"; fi
+
+          META_URL=$(curl -fsSL "https://api.github.com/repos/vernesong/mihomo-oix/releases/tags/Pre-Alpha" \
+            | jq -r '.assets[]?.browser_download_url' | grep -Ei 'linux-amd64-v3.*\.gz$' | head -n1 || true)
+          [ -n "${META_URL:-}" ] || META_URL="https://github.com/MetaCubeX/mihomo/releases/download/v1.19.31/mihomo-linux-amd64-v3-v1.19.31.gz"
+          echo "Meta v3 内核: $META_URL"
+          curl -fsSL --retry 3 -o /tmp/meta.gz "$META_URL"
+          gzip -dc /tmp/meta.gz > ib/files/etc/openclash/core/clash_meta
+          chmod +x ib/files/etc/openclash/core/clash_meta
+          ln -sf /etc/openclash/core/clash_meta ib/files/etc/openclash/core/clash
+
+          for pair in country.mmdb:Country.mmdb geoip.dat:GeoIP.dat geosite.dat:GeoSite.dat; do
+            src="${pair%%:*}"; dst="${pair##*:}"
+            curl -fsSL --retry 3 -o "ib/files/etc/openclash/$dst" \
+              "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/$src" \
+              || echo "::warning::$dst 下载失败，开机后可在 OpenClash 内更新"
+          done
+          ls -lh ib/files/etc/openclash ib/files/etc/openclash/core
+
+      - name: 编译镜像（只出 ext4-combined-efi.img.gz）
+        run: |
+          set -euo pipefail
+          cd ib
+          PKGS="base-files ca-bundle dropbear e2fsprogs firewall4 fstools \
+          grub2-bios-setup kmod-button-hotplug kmod-nft-offload libc libgcc \
+          libustream-mbedtls logd mtd netifd nftables odhcp6c odhcpd-ipv6only \
+          partx-utils procd-ujail uci uclient-fetch urandom-seed urngd \
+          -kmod-amazon-ena -kmod-amd-xgbe -kmod-bnx2 -kmod-dmac-intel -kmod-e1000 \
+          -kmod-e1000e -kmod-forcedeth -kmod-igb -kmod-ixgbe -kmod-r8169 -kmod-tg3 \
+          -kmod-drm-i915 qemu-ga luci luci-ssl luci-i18n-base-zh-cn \
+          luci-app-attendedsysupgrade luci-i18n-attendedsysupgrade-zh-cn -ppp \
+          -ppp-mod-pppoe -dnsmasq dnsmasq-full bash curl \
+          ca-certificates coreutils coreutils-nohup ip-full ipset kmod-tun \
+          kmod-inet-diag kmod-nft-tproxy kmod-nft-nat unzip tar bind-dig \
+          luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn \
+          luci-compat luci-lua-runtime luci-app-openclash -luci-theme-bootstrap"
+
+          echo "== 预设文件自检 =="
+          grep -n '192.168.123.2' files/etc/uci-defaults/99-custom-setup.sh || true
+          grep -n 'nexthop' files/opt/ikuai-bypass/config.yml || true
+
+          if make image PROFILE=generic PACKAGES="$PKGS" FILES="files" > /tmp/build.log 2>&1; then
+            echo "== 编译成功（完整包清单）=="
+          else
+            echo "::warning::完整包清单编译失败，剔除 luci-app-openclash 后重试（插件文件已手工注入）"
+            tail -n 40 /tmp/build.log || true
+            PKGS2=$(echo "$PKGS" | sed 's/ *luci-app-openclash//g')
+            make image PROFILE=generic PACKAGES="$PKGS2" FILES="files" > /tmp/build.log 2>&1 || {
+              tail -n 80 /tmp/build.log; exit 1; }
+            echo "== 编译成功（剔除 luci-app-openclash）=="
+          fi
+          tail -n 12 /tmp/build.log
+          ls -lh bin/targets/x86/64/
+
+      - name: 校验并规整产物文件名
+        run: |
+          set -euo pipefail
+          OUT="ib/bin/targets/x86/64"
+          EXPECT="immortalwrt-${VER}-x86-64-generic-ext4-combined-efi.img.gz"
+          if [ -f "$OUT/$EXPECT" ]; then
+            SRC="$OUT/$EXPECT"
+          else
+            SRC=$(ls "$OUT"/*ext4-combined-efi.img.gz 2>/dev/null | head -n1 || true)
+            [ -n "${SRC:-}" ] || { echo "::error::未生成 ext4-combined-efi.img.gz"; ls -lh "$OUT"; exit 1; }
+            echo "::warning::实际文件名 $(basename "$SRC")，规整为 $EXPECT"
+          fi
+          mkdir -p /tmp/output
+          cp "$SRC" "/tmp/output/$EXPECT"
+          ( cd /tmp/output && sha256sum "$EXPECT" > "$EXPECT.sha256" )
+          echo "IMG_NAME=$EXPECT" >> "$GITHUB_ENV"
+          ls -lh /tmp/output
+          cat "/tmp/output/$EXPECT.sha256"
+
+      - name: 上传构建产物 (Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: immortalwrt-${{ inputs.version }}-x86-64-generic-ext4-combined-efi
+          path: /tmp/output/*
+          retention-days: 30
+          compression-level: 0
+
+      - name: 发布 Release
+        if: ${{ inputs.publish_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}-efi-${{ github.run_number }}
+          name: ImmortalWrt ${{ inputs.version }} x86-64 EFI (iKuai Bypass / LAN 192.168.123.2)
+          files: /tmp/output/*
+          body: |
+            ## ImmortalWrt ${{ inputs.version }} · x86-64 · generic · ext4 · combined-efi
+
+            * 产物：`${{ env.IMG_NAME }}`（+ `.sha256`），与官方 x86/64 EFI 镜像同名同格式，直接写盘/U 盘启动。
+            * 默认 LAN：**192.168.123.2/24**（`/24`，非 `/32`），DHCP/IPv6 RA 关闭。
+            * 预装：iKuai Bypass（LuCI + x86_64 CLI + 19001 WebUI）、OpenClash + Mihomo `linux-amd64-v3` 内核 + 离线 GeoIP/GeoSite。
+            * 首次开机由 `uci-defaults` 自动初始化；日志见 `/tmp/setup.log`。
