@@ -1,0 +1,84 @@
+name: Smoke Test (boot image in QEMU/KVM)
+
+# 真启动一次固件：串口登录 → 校验 LAN IP / 网关 / 服务 / 包 / 内核
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag（留空用最新）'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 安装 QEMU / expect
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-x86 expect ovmf file
+
+      - name: 下载待测镜像
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/fw
+          if [ -n "${TAG:-}" ]; then
+            gh release download "$TAG" -p '*ext4-combined-efi.img.gz' -D /tmp/fw
+          else
+            gh release download --repo "$GITHUB_REPOSITORY" -p '*ext4-combined-efi.img.gz' -D /tmp/fw
+          fi
+          ls -lh /tmp/fw
+          cd /tmp/fw && gunzip -f ./*.img.gz && ls -lh
+          IMG=$(ls /tmp/fw/*.img | head -n1)
+          echo "IMG=$IMG" >> "$GITHUB_ENV"
+          sha256sum "$IMG"
+
+      - name: 选择加速器
+        id: accel
+        run: |
+          if [ -w /dev/kvm ]; then
+            echo "args=-enable-kvm -cpu host" >> "$GITHUB_OUTPUT"
+            echo "使用 KVM 硬件加速"
+          else
+            echo "args=-accel tcg -cpu max" >> "$GITHUB_OUTPUT"
+            echo "::warning::runner 没有 /dev/kvm，退回 TCG 软件模拟（会更慢）"
+          fi
+
+      - name: 启动固件并采集串口输出
+        run: |
+          chmod +x scripts/smoke.exp
+          scripts/smoke.exp "$IMG" ${{ steps.accel.outputs.args }} > /tmp/smoke.log 2>&1 || true
+          echo "----- 串口日志大小: $(wc -c < /tmp/smoke.log) 字节 -----"
+          sed -n '/===SMOKE_START===/,$p' /tmp/smoke.log | sed 's/\r$//' | head -n 120 || true
+
+      - name: 判定结果
+        run: |
+          set -uo pipefail
+          FAIL=0
+          grep -q '192\.168\.123\.2'                                   /tmp/smoke.log || { echo "::error::没看到 192.168.123.2"; FAIL=1; }
+          grep -q 'IKUAIBYPASS_ENABLED'                                /tmp/smoke.log || { echo "::error::ikuai-bypass 未开机自启"; FAIL=1; }
+          grep -q 'nexthop: 192\.168\.123\.2'                          /tmp/smoke.log || { echo "::error::nexthop 不是 192.168.123.2"; FAIL=1; }
+          grep -q 'ikuai-url: http://192\.168\.123\.1'                  /tmp/smoke.log || { echo "::error::ikuai-url 不是 192.168.123.1"; FAIL=1; }
+          grep -q 'SMOKE_END'                                          /tmp/smoke.log || { echo "::error::命令序列没跑完（可能没登录成功）"; FAIL=1; }
+          grep -qi 'openclash'                                         /tmp/smoke.log || echo "::warning::没看到 openclash 包记录"
+          grep -qi 'Illegal instruction'                               /tmp/smoke.log && echo "::warning::clash_meta 在当前 CPU 上报 Illegal instruction（如果 runner 不是 v3 指令集则属正常）"
+          if [ "$FAIL" = "1" ]; then echo "冒烟测试不通过"; exit 1; fi
+          echo "冒烟测试通过"
+
+      - name: 保存串口日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-serial-log
+          path: /tmp/smoke.log
+          retention-days: 14

@@ -1,0 +1,53 @@
+#!/usr/bin/expect -f
+# 用法: smoke.exp <raw.img> [-enable-kvm -cpu host | -accel tcg -cpu max]
+set timeout 420
+set img [lindex $argv 0]
+set accelargs [lrange $argv 1 end]
+log_user 1
+
+spawn qemu-system-x86_64 {*}$accelargs -m 2048 -smp 2 \
+  -drive file=$img,format=raw,if=virtio \
+  -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
+  -nographic -no-reboot
+
+expect {
+  -re "login:" { send "root\r" }
+  eof          { puts "\n###EXIT_BEFORE_LOGIN###"; exit 2 }
+  timeout      { puts "\n###TIMEOUT_LOGIN###"; exit 3 }
+}
+expect {
+  -re "# $" { }
+  eof      { puts "\n###EXIT_BEFORE_SHELL###"; exit 4 }
+  timeout  { puts "\n###TIMEOUT_SHELL###"; exit 5 }
+}
+
+set timeout 60
+set cmds {
+  "echo ===SMOKE_START==="
+  "uci get network.lan.ipaddr"
+  "uci get network.lan.netmask"
+  "uci get network.lan.gateway"
+  "uci get network.lan.dns"
+  "uci get dhcp.lan.ignore"
+  "ip -4 addr show br-lan | grep inet"
+  "ip -4 route | head -5"
+  "cat /tmp/setup.log | tail -n 15"
+  "ls -l /opt/ikuai-bypass/"
+  "file /opt/ikuai-bypass/ikuai-bypass"
+  "/etc/init.d/ikuai-bypass enabled && echo IKUAIBYPASS_ENABLED"
+  "/etc/init.d/ikuai-bypass running && echo IKUAIBYPASS_RUNNING"
+  "grep -E 'nexthop|ikuai-url' /opt/ikuai-bypass/config.yml"
+  "ls -l /etc/openclash/core/"
+  "/etc/openclash/core/clash_meta -v"
+  "cat /proc/sys/kernel/osrelease"
+  "opkg list-installed 2>/dev/null | grep -Ei 'openclash|ikuai|argon|dnsmasq|qemu-ga|tun|ipset'"
+  "uci get luci.main.mediaurlbase"
+  "echo ===SMOKE_END==="
+}
+foreach c $cmds {
+  send "$c\r"
+  expect -re "# $" {}
+}
+
+send "poweroff\r"
+expect eof
