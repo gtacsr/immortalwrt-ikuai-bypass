@@ -25,7 +25,10 @@ start() {
         if pidof ikuai-bypass >/dev/null 2>&1; then
             return 0
         fi
-        ${BIN_PATH} -r cronAft -c ${CONFIG_PATH} > /dev/null 2>&1 &
+        # Why/为什么: v4.2.0 的分流模块由命令行 -m 决定（默认 ispdomain），
+        # 不传的话 ip 分组 / 下一跳规则根本不会被推送。ii = ispdomain + ipgroup。
+        # 需要跑 IPv6 分组时另跑：ikuai-bypass -r once -m ipv6group -c config.yml
+        ${BIN_PATH} -r cronAft -m "${IKB_MODULE:-ii}" -c ${CONFIG_PATH} > /dev/null 2>&1 &
     fi
 }
 
