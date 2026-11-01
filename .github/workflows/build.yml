@@ -165,6 +165,15 @@ jobs:
             find "d-$p" -name '*.so*' -exec cp -a {} "$IB/files/usr/lib/vmware-tools-libs/" \;
           done
 
+          # 包里的 .so 没有版本软链，按 SONAME 补齐（vmtoolsd 依赖 libvmtools.so.0）
+          for pair in "libvmtools.so:libvmtools.so.0" "libguestlib.so:libguestlib.so.0" \
+                      "libhgfs.so:libhgfs.so.0" "libDeployPkg.so:libDeployPkg.so.0"; do
+            src="${pair%%:*}"; dst="${pair##*:}"
+            if [ -f "$IB/files/usr/lib/vmware-tools-libs/$src" ]; then
+              ln -sf "$src" "$IB/files/usr/lib/vmware-tools-libs/$dst"
+            fi
+          done
+
           chmod +x "$IB/files"/etc/init.d/open-vm-tools "$IB/files"/usr/bin/vmtoolsd 2>/dev/null || true
           echo "== vmtoolsd =="; ls -l "$IB/files"/usr/bin/vmtoolsd || true
           echo "== 私有依赖库 =="; ls -l "$IB/files"/usr/lib/vmware-tools-libs || true
