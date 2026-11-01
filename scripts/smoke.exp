@@ -10,15 +10,14 @@ spawn qemu-system-x86_64 {*}$accelargs -m 2048 -smp 2 \
   -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
   -nographic -no-reboot
 
+# OpenWrt 的串口是 inittab askfirst：先回车激活控制台，再登录（root 空密码）
 expect {
-  -re "login:" { send "root\r" }
-  eof          { puts "\n###EXIT_BEFORE_LOGIN###"; exit 2 }
-  timeout      { puts "\n###TIMEOUT_LOGIN###"; exit 3 }
-}
-expect {
-  -re "# $" { }
-  eof      { puts "\n###EXIT_BEFORE_SHELL###"; exit 4 }
-  timeout  { puts "\n###TIMEOUT_SHELL###"; exit 5 }
+  -re "press Enter" { send "\r"; exp_continue }
+  -re "login:"      { send "root\r"; exp_continue }
+  -re "Password:"   { send "\r"; exp_continue }
+  -re "# $"         { puts "\n###SHELL_OK###" }
+  eof               { puts "\n###EXIT_BEFORE_SHELL###"; exit 2 }
+  timeout           { puts "\n###TIMEOUT_SHELL###"; exit 3 }
 }
 
 set timeout 60
