@@ -26,6 +26,27 @@ iKuai Bypass 配置迁移说明：4.4.x  →  4.2.0
 3) stream-ipport 删掉 4 个字段
    4.4.x 才有、v4.2.0 没有：src-addr-inv、dst-addr-inv、prio、protocol
    说明：v4.2.0 忽略未知字段，但语义不会生效，留着只会误导。
+   补充（已核对 4.4.110 源码）：这 4 个字段在 4.4.110 里也没有被解析——
+   config.go 的 StreamIpPort 结构体只有 type/opt-tagname/interface/nexthop/
+   src-addr/src-addr-opt-ipgroup/ip-group/mode/ifaceband，
+   AddStreamIpPort 的入参签名与 v4.2.0 完全相同。
+   也就是说它们是模板残留，删掉不丢任何功能。
+
+3.5) 同样属于模板残留、两个版本都不读的顶层键
+   ikuai-url-ignore-cert、proxy、run-mode、mode
+   （4.4.110 里模块选择同样是命令行 -m，MaxNumberOfOneRecords 才是它真正新增的，
+     作用是限制单条规则写入量——那是爱快 4.0 API 约 90KB 的限制，对 3.x 无意义）
+
+6) IPv6 分组怎么跑（v4.2.0 没有 "-m iip" 这个组合）
+   4.4.x 有 ii+ipv6 的组合值，v4.2.0 没有，所以本镜像这样处理：
+     - 主服务：-r cronAft -m ii   （运营商/域名分流 + ip 分组/下一跳）
+     - IPv6：init 脚本起一个独立循环，立刻跑一次 -m ipv6group，之后每 24 小时一次
+   相关变量（改 /etc/init.d/ikuai-bypass 顶部）：
+     IKB_MODULE          默认 ii
+     IKB_RUN_IPV6        默认 1，设 0 关闭 IPv6 自动同步
+     IKB_IPV6_INTERVAL   默认 86400 秒
+   日志：/tmp/ikuai-bypass-ipv6.log
+   手动跑一次：ikuai-bypass -r once -m ipv6group -c /opt/ikuai-bypass/config.yml
 
 4) stream-ipport 的 mode 取值范围
    4.4.x : 支持到 6（高级模式）
