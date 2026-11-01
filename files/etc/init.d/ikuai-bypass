@@ -38,9 +38,12 @@ start_service() {
     [ -f "${CONFIG_PATH}" ] || return 1
 
     # 主实例：分流同步守护进程（同时提供 19001 面板）
+    # Why/为什么包一层 while：实测直接由 procd 拉起二进制，开机收尾阶段该实例会被
+    # SIGTERM 收尾（面板不监听）；包成常驻 shell 后与 ipv6 实例同样存活，且二进制
+    # 若异常退出会被立刻重启，等于免费的自愈。
     procd_open_instance main
     procd_set_param command /bin/sh -c \
-        "exec ${BIN_PATH} -r cronAft -m ${IKB_MODULE} -c ${CONFIG_PATH} >> ${MAIN_LOG} 2>&1"
+        "while :; do ${BIN_PATH} -r cronAft -m ${IKB_MODULE} -c ${CONFIG_PATH} >> ${MAIN_LOG} 2>&1; sleep 5; done"
     procd_set_param respawn 3600 5 5
     procd_close_instance
 
