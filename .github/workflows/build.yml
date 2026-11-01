@@ -136,7 +136,7 @@ jobs:
           BASE="https://downloads.openwrt.org/releases/24.10.4/packages/x86_64/packages"
           rm -rf /tmp/omt && mkdir -p /tmp/omt && cd /tmp/omt
           curl -fsSL "$BASE/Packages.gz" -o P.gz && gunzip -f P.gz
-          getfn() { awk -v p="$1" 'BEGIN{RS="";FS="\n"} $0 ~ ("^Package: " p "$") {for(i=1;i<=NF;i++) if($i ~ /^Filename: /){sub(/^Filename: /,"",$i); print $i}}' P; }
+          getfn() { awk -v p="$1" '$1=="Package:"{cur=$2} cur==p && $1=="Filename:"{print $2; exit}' P; }
           for p in open-vm-tools libtirpc libmspack libdnet; do
             f=$(getfn "$p"); [ -n "${f:-}" ] || { echo "::error::源里取不到 $p"; exit 1; }
             echo "取包 $p -> $f"
