@@ -1,28 +1,35 @@
+# ============================================================
+# iKuai Bypass 配置 —— 适配 v4.2.0（兼容爱快 3.x 的最后一个稳定版）
+# 相对于 4.4.x 模板的改动：见同目录 MIGRATION-4.2.0.txt
+# 4.4.x 原版留档：config.4.4-example.yml
+# ============================================================
+
 ikuai-url: http://192.168.123.1
-ikuai-url-ignore-cert: true
 username: admin
-password: ""
+password: ""          # ← 填你爱快后台的真实密码，否则同步会认证失败
 cron: 0 7 * * *
 AddErrRetryWait: 10s
 AddWait: 1s
-run-mode: cronAft
-mode: ipgroup
-
-proxy:
-  mode: smart
-  url: ""
-  user: ""
-  pass: ""
-
 github-proxy: "https://gh-proxy.com/"
-custom-isp:
-  - tag: 国内IP列表
-    url: https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/cn.txt
-  - tag: telegram
-    url: https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/telegram.txt
-  - tag: google
-    url: https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/google.txt
 
+# ------------------------------------------------------------
+# 自定义运营商分流（-m ispdomain / -m ii 生效）
+# 4.2.0 用 name:，4.4.x 用 tag:；tag 在 4.2.0 里是「规则备注后缀」
+# ------------------------------------------------------------
+custom-isp:
+  - name: 国内IP列表
+    url: https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/cn.txt
+    tag: ipcn
+  - name: telegram
+    url: https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/telegram.txt
+    tag: iptg
+  - name: google
+    url: https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/google.txt
+    tag: ipgoogle
+
+# ------------------------------------------------------------
+# 域名分流（-m ispdomain / -m ii 生效）—— 字段与 4.4.x 一致，无需改
+# ------------------------------------------------------------
 stream-domain:
   - interface: wan2
     src-addr: 192.168.123.3-192.168.123.254
@@ -40,53 +47,52 @@ stream-domain:
     url: https://raw.githubusercontent.com/joyanhui/ikuai-bypass/main/private/direct-domain-list.txt
     tag: MyDirect
 
+# ------------------------------------------------------------
+# IP 分组（-m ipgroup / -m ii / -m ip 生效）
+# 4.2.0 必须写 name:，写 tag: 会变成「空名字组」，下一跳规则也随之失效
+# ------------------------------------------------------------
 ip-group:
-  - tag: 国内
+  - name: 国内
     url: https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/cn.txt
-  - tag: Telegram
+  - name: Telegram
     url: https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/telegram.txt
 
+# IPv6 分组（需单独以 -m ipv6group 运行一次；默认的 ii 模式不含它）
 ipv6-group:
-  - tag: 国内v6
+  - name: 国内v6
     url: https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/cn.txt
 
+# ------------------------------------------------------------
+# 端口分流（-m ipgroup / -m ii 生效）
+# 4.2.0 没有 src-addr-inv / dst-addr-inv / prio / protocol 这 4 个字段；
+# mode 是「负载模式」0-5（4.4.x 的 6 在 4.2.0 里不存在）
+# ------------------------------------------------------------
 stream-ipport:
-  - type: "0"
+  - type: "0"                    # 0-外网线路  1-下一跳网关
     opt-tagname: "国内流量"
     interface: wan1
     nexthop: ""
     src-addr: 192.168.123.3-192.168.123.254
     src-addr-opt-ipgroup: ""
-    src-addr-inv: 1
     ip-group: 国内
-    dst-addr-inv: 1
-    prio: 0
-    mode: 6
+    mode: 0
     ifaceband: 0
-    protocol: "tcp+udp"
   - type: "1"
     opt-tagname: "负责分流到下一跳"
     interface: ""
     nexthop: 192.168.123.2
     src-addr: 192.168.123.3-192.168.123.254
     src-addr-opt-ipgroup: ""
-    src-addr-inv: 0
     ip-group: "Telegram"
-    dst-addr-inv: 0
-    prio: 0
     mode: 0
     ifaceband: 0
-    protocol: "tcp+udp"
 
+# ------------------------------------------------------------
+# WebUI：端口沿用 19001（4.2.0 默认是 19000）
+# ------------------------------------------------------------
 webui:
   port: "19001"
   user: admin
   pass: ""
   enable: true
   cdn-prefix: https://cdn.jsdelivr.net/npm
-
-MaxNumberOfOneRecords:
-  Isp: 5000
-  Ipv4: 2450
-  Ipv6: 1600
-  Domain: 3000
