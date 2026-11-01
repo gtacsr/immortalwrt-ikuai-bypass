@@ -147,13 +147,22 @@ jobs:
             tar -xzf "x-$p/data.tar.gz" -C "d-$p"
           done
 
-          # 程序本体（排除它自带的 init 脚本，用我们仓库里的版本）
-          tar -C d-open-vm-tools -cf - --exclude=./etc/init.d/open-vm-tools . | tar -C "$IB/files" -xf -
+          # 程序本体：包里二进制在 /bin，统一摆到 /usr/bin；
+          # 包里的 /sbin/shutdown、/sbin/telinit 会顶掉 busybox 同名命令，刻意不拷。
+          mkdir -p "$IB/files/usr/bin" "$IB/files/usr/lib/vmware-tools-libs" \
+                   "$IB/files/usr/lib/open-vm-tools" "$IB/files/etc/vmware-tools"
+          cp -a d-open-vm-tools/bin/.        "$IB/files/usr/bin/"
+          cp -a d-open-vm-tools/lib/lib*.so* "$IB/files/usr/lib/vmware-tools-libs/"
+          if [ -d d-open-vm-tools/usr/lib/open-vm-tools ]; then
+            cp -a d-open-vm-tools/usr/lib/open-vm-tools/. "$IB/files/usr/lib/open-vm-tools/"
+          fi
+          if [ -d d-open-vm-tools/etc/vmware-tools ]; then
+            cp -a d-open-vm-tools/etc/vmware-tools/. "$IB/files/etc/vmware-tools/"
+          fi
 
-          # 依赖库进私有目录，运行时用 LD_LIBRARY_PATH 指过去
-          mkdir -p "$IB/files"/usr/lib/vmware-tools-libs
+          # 三个依赖库进私有目录（运行时 LD_LIBRARY_PATH 指过去，不动系统库）
           for p in libtirpc libmspack libdnet; do
-            find "d-$p" -name '*.so*' -exec cp -a {} "$IB/files"/usr/lib/vmware-tools-libs/ \;
+            find "d-$p" -name '*.so*' -exec cp -a {} "$IB/files/usr/lib/vmware-tools-libs/" \;
           done
 
           chmod +x "$IB/files"/etc/init.d/open-vm-tools "$IB/files"/usr/bin/vmtoolsd 2>/dev/null || true
