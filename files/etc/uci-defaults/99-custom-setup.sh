@@ -63,12 +63,14 @@ if [ -d /opt/ikuai-bypass/install-cache ]; then
 fi
 
 # ========================================================
-# 7. 激活并开启 iKuai Bypass 服务开机自启
+# 7. 激活 iKuai Bypass 服务开机自启
 # ========================================================
+# Why/为什么只 enable 不 start：uci-defaults 跑在 rcS 服务启动之前，
+# 在这里 start 会让 procd 对同一实例登记两次，先起来的那个被 SIGTERM 收尾，
+# 结果首次开机后 19001 面板不监听。交给 rcS（START=99）启动即可。
 if [ -f /etc/init.d/ikuai-bypass ]; then
   chmod +x /etc/init.d/ikuai-bypass
   /etc/init.d/ikuai-bypass enable
-  /etc/init.d/ikuai-bypass start
 fi
 
 # ========================================================
