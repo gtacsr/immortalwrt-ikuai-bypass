@@ -60,6 +60,10 @@ run "grep -E '^(mode|run-mode|proxy|MaxNumberOfOneRecords|ikuai-url-ignore-cert)
 run "grep -o IKB_MODULE /etc/init.d/ikuai-bypass | head -n 1"
 run {/opt/ikuai-bypass/ikuai-bypass -r once -m ii -c /opt/ikuai-bypass/config.yml > /tmp/ikb.out 2>&1 & sleep 8; killall -q ikuai-bypass; head -n 8 /tmp/ikb.out}
 run "grep -c . /tmp/ikb.out"
+run "grep -o IKB_RUN_IPV6 /etc/init.d/ikuai-bypass | head -n 1"
+run "cat /var/run/ikuai-bypass-ipv6.pid"
+run "head -n 6 /tmp/ikuai-bypass-ipv6.log"
+run "kill -0 $(cat /var/run/ikuai-bypass-ipv6.pid) && echo IPV6_LOOP_ALIVE"
 run "/usr/libexec/ikuai-bypass-openwrt install 2>&1 | head -n 3"
 run "/usr/libexec/ikuai-bypass-openwrt luci-update 2>&1 | head -n 3"
 run "IKB_ALLOW_UPGRADE=0 /usr/libexec/ikuai-bypass-openwrt update 2>&1 | head -n 2"
