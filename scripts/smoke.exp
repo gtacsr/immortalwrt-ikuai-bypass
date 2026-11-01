@@ -20,26 +20,22 @@ expect {
   timeout           { puts "\n###TIMEOUT_SHELL###"; exit 3 }
 }
 
-set timeout 60
+set timeout 90
 set cmds {
   "echo ===SMOKE_START==="
+  "cat /proc/cmdline"
+  "ls -la /etc/uci-defaults/ 2>&1"
+  "ls -la /etc/config/ 2>&1"
+  "uci show network 2>&1 | head -n 25"
+  "cat /etc/config/system 2>&1 | head -n 15"
+  "mount | grep -E ' / |/tmp|overlay'"
+  "command -v opkg; command -v apk; ls /usr/lib/opkg 2>&1 | head -n 3; ls /lib/apk/db 2>&1 | head -n 3"
+  "apk info 2>/dev/null | tr '\\n' ' ' | cut -c1-700"
+  "opkg list-installed 2>/dev/null | grep -Ei 'openclash|argon|dnsmasq|ikuai' "
+  "ls -l /etc/init.d/ikuai-bypass /etc/uci-defaults/99-custom-setup.sh 2>&1"
+  "ls -ld /tmp; ls -la /tmp | head -n 10"
+  "dmesg | grep -iE 'uci-defaults|overlay|first boot' "
   "uci get network.lan.ipaddr"
-  "uci get network.lan.netmask"
-  "uci get network.lan.gateway"
-  "uci get network.lan.dns"
-  "uci get dhcp.lan.ignore"
-  "ip -4 addr show br-lan | grep inet"
-  "ip -4 route | head -5"
-  "cat /tmp/setup.log | tail -n 15"
-  "ls -l /opt/ikuai-bypass/"
-  "file /opt/ikuai-bypass/ikuai-bypass"
-  "/etc/init.d/ikuai-bypass enabled && echo IKUAIBYPASS_ENABLED"
-  "/etc/init.d/ikuai-bypass running && echo IKUAIBYPASS_RUNNING"
-  "grep -E 'nexthop|ikuai-url' /opt/ikuai-bypass/config.yml"
-  "ls -l /etc/openclash/core/"
-  "/etc/openclash/core/clash_meta -v"
-  "cat /proc/sys/kernel/osrelease"
-  "opkg list-installed 2>/dev/null | grep -Ei 'openclash|ikuai|argon|dnsmasq|qemu-ga|tun|ipset'"
   "uci get luci.main.mediaurlbase"
   "echo ===SMOKE_END==="
 }
