@@ -53,35 +53,31 @@ jobs:
           mkdir -p ib/files
           ls ib
 
-      - name: 注入 iKuai Bypass（LuCI 面板 + x86_64 CLI 核心 + 离线缓存）
+      - name: 注入 iKuai Bypass（v4.2.0 · 兼容爱快 3.x：LuCI 薄壳 + x86_64 CLI + 离线缓存）
         run: |
           set -euo pipefail
+          IKB_VER="v4.2.0"
+          IKB_BASE="https://github.com/joyanhui/ikuai-bypass/releases/download/${IKB_VER}"
+          IKB_LUCI="https://github.com/joyanhui/ikuai-bypass/releases/download/ikuai-bypass-v4.4.110/ikuai-bypass-luci-openwrt-all.ipk"
           mkdir -p ib/files/opt/ikuai-bypass/install-cache/install-file ib/files/etc/openclash/core
-          API=https://api.github.com/repos/joyanhui/ikuai-bypass/releases/latest
 
-          IPK_URL=$(curl -fsSL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$API" \
-            | jq -r '.assets[]?.browser_download_url' | grep -Ei 'luci.*\.ipk$' | head -n1 || true)
-          [ -n "${IPK_URL:-}" ] || IPK_URL="https://github.com/joyanhui/ikuai-bypass/releases/download/ikuai-bypass-v4.4.110/ikuai-bypass-luci-openwrt-all.ipk"
-          echo "LuCI 插件: $IPK_URL"
-          curl -fsSL --retry 3 -o /tmp/ikuai.ipk "$IPK_URL"
+          # v4.2.0 的资产命名是 ikuai-bypass-linux-amd64.zip，且该版本没有发布 LuCI ipk
+          echo "CLI 核心: $IKB_BASE/ikuai-bypass-linux-amd64.zip"
+          curl -fsSL --retry 5 -o /tmp/cli.zip "$IKB_BASE/ikuai-bypass-linux-amd64.zip"
+          rm -rf /tmp/cli-x && mkdir -p /tmp/cli-x
+          unzip -o /tmp/cli.zip -d /tmp/cli-x >/dev/null
+          install -m 0755 /tmp/cli-x/ikuai-bypass ib/files/opt/ikuai-bypass/ikuai-bypass
+          file ib/files/opt/ikuai-bypass/ikuai-bypass || true
+
+          # LuCI 前端只是薄壳（状态/起停全部转调 install.sh），与核心版本无关，沿用已发布的 ipk
+          echo "LuCI 前端: $IKB_LUCI"
+          curl -fsSL --retry 5 -o /tmp/ikuai.ipk "$IKB_LUCI"
           rm -rf /tmp/ikuai-x && mkdir -p /tmp/ikuai-x
           tar -zxf /tmp/ikuai.ipk -C /tmp/ikuai-x 2>/dev/null || ( cd /tmp/ikuai-x && ar -x /tmp/ikuai.ipk )
           if   [ -f /tmp/ikuai-x/data.tar.gz  ]; then tar -zxf /tmp/ikuai-x/data.tar.gz  -C ib/files/
           elif [ -f /tmp/ikuai-x/data.tar.xz  ]; then tar -xf  /tmp/ikuai-x/data.tar.xz  -C ib/files/
           elif [ -f /tmp/ikuai-x/data.tar.zst ]; then tar --zstd -xf /tmp/ikuai-x/data.tar.zst -C ib/files/
-          else echo "::error::iKuai Bypass ipk 解包失败"; ls -la /tmp/ikuai-x; exit 1; fi
-
-          CLI_URL=$(curl -fsSL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$API" \
-            | jq -r '.assets[]?.browser_download_url' | grep -Ei 'cli-linux-x86_64.*\.zip$' | head -n1 || true)
-          [ -n "${CLI_URL:-}" ] || CLI_URL="https://github.com/joyanhui/ikuai-bypass/releases/download/ikuai-bypass-v4.4.110/ikuai-bypass-cli-linux-x86_64.zip"
-          echo "CLI 核心: $CLI_URL"
-          curl -fsSL --retry 3 -o /tmp/cli.zip "$CLI_URL"
-          unzip -o /tmp/cli.zip -d ib/files/opt/ikuai-bypass/ >/dev/null
-          chmod +x ib/files/opt/ikuai-bypass/* 2>/dev/null || true
-          if [ -f ib/files/opt/ikuai-bypass/ikuai-bypass-cli-linux-x86_64 ]; then
-            mv -f ib/files/opt/ikuai-bypass/ikuai-bypass-cli-linux-x86_64 ib/files/opt/ikuai-bypass/ikuai-bypass
-          fi
-          file ib/files/opt/ikuai-bypass/ikuai-bypass || true
+          else echo "::error::LuCI ipk 解包失败"; ls -la /tmp/ikuai-x; exit 1; fi
 
           curl -fsSL --retry 3 -o ib/files/opt/ikuai-bypass/install-cache/install.sh \
             "https://joyanhui.github.io/ikuai-bypass/install.sh" || true
@@ -89,7 +85,17 @@ jobs:
             "https://joyanhui.github.io/ikuai-bypass/install-file/common.sh" || true
           chmod +x ib/files/opt/ikuai-bypass/install-cache/install.sh \
                    ib/files/opt/ikuai-bypass/install-cache/install-file/common.sh 2>/dev/null || true
-          echo "v4.4.110" > ib/files/opt/ikuai-bypass/.version
+          printf '%s\n' "$IKB_VER" > ib/files/opt/ikuai-bypass/.version
+
+          # 版本钉死说明（LuCI 里的“更新/安装”会拉最新 4.4.x，爱快 3.x 用不了，别点）
+          {
+            echo "本镜像内置 iKuai Bypass ${IKB_VER}（兼容爱快 3.x 的最后一个稳定版）"
+            echo "注意：LuCI 或 WebUI 里的“更新到最新/重新安装”会拉取 4.4.x，爱快 3.x 不兼容。"
+            echo "手工恢复本版本："
+            echo "  cd /opt/ikuai-bypass && curl -fL -o cli.zip \\"
+            echo "    https://github.com/joyanhui/ikuai-bypass/releases/download/${IKB_VER}/ikuai-bypass-linux-amd64.zip"
+            echo "  unzip -o cli.zip ikuai-bypass && chmod +x ikuai-bypass && /etc/init.d/ikuai-bypass restart"
+          } > ib/files/opt/ikuai-bypass/VERSION-PIN.txt
 
           # 本仓库预设覆盖（含 192.168.123.2 的 network / bypass 配置），必须在 ipk 解包之后
           cp -rf files/. ib/files/
