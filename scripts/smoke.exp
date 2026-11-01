@@ -16,7 +16,7 @@ proc run {cmd} {
 
 spawn qemu-system-x86_64 {*}$accelargs -m 2048 -smp 2 \
   -drive file=$img,format=raw,if=virtio \
-  -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
+  -netdev user,id=n0 -device e1000,netdev=n0 \
   -nographic -no-reboot
 
 expect {
@@ -47,7 +47,9 @@ run "uci get dhcp.lan.ignore"
 run "grep -n uci-defaults /etc/init.d/boot | head -5"
 run "logread 2>/dev/null | grep -iE 'uci-default|setup' | head -8"
 run "ls -la /tmp/.uci-defaults 2>&1 | head -5"
-run "sleep 20"; run "ip -4 addr show br-lan | grep inet"
+run "sleep 20"; run "ls /sys/class/net"
+run "dmesg | grep -iE 'e1000|PRO/1000' | tail -n 3"
+run "ip -4 addr show br-lan | grep inet"
 run "ip -4 route"
 run "/etc/init.d/ikuai-bypass enabled && echo IKUAIBYPASS_ENABLED"
 run {ps | grep -c "[i]kuai-bypass"}
