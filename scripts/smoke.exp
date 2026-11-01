@@ -1,48 +1,56 @@
 #!/usr/bin/expect -f
 # 用法: smoke.exp <raw.img> [-enable-kvm -cpu host | -accel tcg -cpu max]
-set timeout 420
+# 注意：ImmortalWrt 的 /etc/config/system 里 ttylogin='0'，控制台 shell 在 rcS 之前就可用，
+#       所以必须先轮询等待 uci-defaults provisioning 完成，不能立刻取样。
+set timeout 900
 set img [lindex $argv 0]
 set accelargs [lrange $argv 1 end]
 log_user 1
+
+proc run {cmd} {
+  send -- $cmd
+  send "\r"
+  expect -re "# $" {}
+}
 
 spawn qemu-system-x86_64 {*}$accelargs -m 2048 -smp 2 \
   -drive file=$img,format=raw,if=virtio \
   -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
   -nographic -no-reboot
 
-# OpenWrt 的串口是 inittab askfirst：先回车激活控制台，再登录（root 空密码）
 expect {
-  -re "press Enter" { send "\r"; exp_continue }
-  -re "login:"      { send "root\r"; exp_continue }
-  -re "Password:"   { send "\r"; exp_continue }
-  -re "# $"         { puts "\n###SHELL_OK###" }
-  eof               { puts "\n###EXIT_BEFORE_SHELL###"; exit 2 }
-  timeout           { puts "\n###TIMEOUT_SHELL###"; exit 3 }
+  -re "# $"    { puts "\n###SHELL_OK###" }
+  -re "login:" { send "root\r"; exp_continue }
+  eof          { puts "\n###EXIT_BEFORE_SHELL###"; exit 2 }
+  timeout      { puts "\n###TIMEOUT_SHELL###"; exit 3 }
 }
 
-set timeout 90
-set cmds {
-  "echo ===SMOKE_START==="
-  "cat /proc/cmdline"
-  "ls -la /etc/uci-defaults/ 2>&1"
-  "ls -la /etc/config/ 2>&1"
-  "uci show network 2>&1 | head -n 25"
-  "cat /etc/config/system 2>&1 | head -n 15"
-  "mount | grep -E ' / |/tmp|overlay'"
-  "command -v opkg; command -v apk; ls /usr/lib/opkg 2>&1 | head -n 3; ls /lib/apk/db 2>&1 | head -n 3"
-  "apk info 2>/dev/null | tr '\\n' ' ' | cut -c1-700"
-  "opkg list-installed 2>/dev/null | grep -Ei 'openclash|argon|dnsmasq|ikuai' "
-  "ls -l /etc/init.d/ikuai-bypass /etc/uci-defaults/99-custom-setup.sh 2>&1"
-  "ls -ld /tmp; ls -la /tmp | head -n 10"
-  "dmesg | grep -iE 'uci-defaults|overlay|first boot' "
-  "uci get network.lan.ipaddr"
-  "uci get luci.main.mediaurlbase"
-  "echo ===SMOKE_END==="
-}
-foreach c $cmds {
-  send "$c\r"
-  expect -re "# $" {}
-}
+set timeout 120
+run "echo ===SMOKE_START==="
+run "cat /proc/uptime"
 
+# 等待首次开机 provisioning 落地（最多约 5 分钟 guest 时间）
+set timeout 900
+run {i=0; while [ $i -lt 100 ]; do [ "$(uci -q get network.lan.ipaddr)" = "192.168.123.2/24" ] && { echo BOOT_PROVISIONED_I=$i; break; }; i=$((i+1)); sleep 3; done; echo WAIT_LOOP_END}
+
+set timeout 120
+run "cat /proc/uptime"
+run "ls -l /etc/uci-defaults/99-custom-setup.sh 2>&1"
+run "cat /tmp/setup.log 2>&1 | tail -n 25"
+run "uci show network | grep -E 'lan\\.(ipaddr|gateway|dns|proto)'"
+run "uci get dhcp.lan.ignore"
+run "ip -4 addr show br-lan | grep inet"
+run "ip -4 route"
+run "/etc/init.d/ikuai-bypass enabled && echo IKUAIBYPASS_ENABLED"
+run "ps | grep -c '[i]kuai-bypass'"
+run "grep -E 'nexthop|ikuai-url' /opt/ikuai-bypass/config.yml"
+run "apk info -e luci-app-openclash && echo OC_PKG_OK"
+run "apk info | tr '\\n' ' ' | cut -c1-600"
+run "/etc/openclash/core/clash_meta -v"
+run "uci get luci.main.mediaurlbase"
+run "uname -n"
+run "echo ===SMOKE_END==="
+
+set timeout 180
 send "poweroff\r"
 expect eof
