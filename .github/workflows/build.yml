@@ -130,6 +130,36 @@ jobs:
           done
           ls -lh ib/files/etc/openclash ib/files/etc/openclash/core
 
+      - name: 注入 open-vm-tools（25.12 源已移除，取自 24.10 x86_64 源）
+        run: |
+          set -euo pipefail
+          BASE="https://downloads.openwrt.org/releases/24.10.4/packages/x86_64/packages"
+          rm -rf /tmp/omt && mkdir -p /tmp/omt && cd /tmp/omt
+          curl -fsSL "$BASE/Packages.gz" -o P.gz && gunzip -f P.gz
+          getfn() { awk -v p="$1" 'BEGIN{RS="";FS="\n"} $0 ~ ("^Package: " p "$") {for(i=1;i<=NF;i++) if($i ~ /^Filename: /){sub(/^Filename: /,"",$i); print $i}}' P; }
+          for p in open-vm-tools libtirpc libmspack libdnet; do
+            f=$(getfn "$p"); [ -n "${f:-}" ] || { echo "::error::源里取不到 $p"; exit 1; }
+            echo "取包 $p -> $f"
+            curl -fsSL "$BASE/$f" -o "$p.ipk"
+            rm -rf "x-$p" "d-$p"; mkdir "x-$p" "d-$p"
+            ( cd "x-$p" && { ar x "../$p.ipk" 2>/dev/null || tar xzf "../$p.ipk"; } )
+            tar -xzf "x-$p/data.tar.gz" -C "d-$p"
+          done
+
+          # 程序本体（排除它自带的 init 脚本，用我们仓库里的版本）
+          tar -C d-open-vm-tools -cf - --exclude=./etc/init.d/open-vm-tools . | tar -C ib/files -xf -
+
+          # 依赖库进私有目录，运行时用 LD_LIBRARY_PATH 指过去
+          mkdir -p ib/files/usr/lib/vmware-tools-libs
+          for p in libtirpc libmspack libdnet; do
+            find "d-$p" -name '*.so*' -exec cp -a {} ib/files/usr/lib/vmware-tools-libs/ \;
+          done
+
+          chmod +x ib/files/etc/init.d/open-vm-tools ib/files/usr/bin/vmtoolsd 2>/dev/null || true
+          echo "== vmtoolsd =="; ls -l ib/files/usr/bin/vmtoolsd || true
+          echo "== 私有依赖库 =="; ls -l ib/files/usr/lib/vmware-tools-libs || true
+          echo "== 配置文件 =="; ls -l ib/files/etc/vmware-tools 2>/dev/null | head -n 5 || true
+
       - name: 编译镜像（只出 ext4-combined-efi.img.gz）
         run: |
           set -euo pipefail
