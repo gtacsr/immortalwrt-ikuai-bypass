@@ -2,18 +2,18 @@
 
 START=99
 STOP=10
+USE_PROCD=1
 
 BIN_PATH="/opt/ikuai-bypass/ikuai-bypass"
 CONFIG_PATH="/opt/ikuai-bypass/config.yml"
 LOCAL_CACHE="/opt/ikuai-bypass/install-cache"
 CACHE_DIR="/tmp/ikuai-bypass-install-cache"
-IPV6_PIDFILE="/var/run/ikuai-bypass-ipv6.pid"
 IPV6_LOG="/tmp/ikuai-bypass-ipv6.log"
 
 # 分流模块：ii = 自定义运营商/域名分流 + ip分组/端口分流（下一跳）
 # 可选：ispdomain / ipgroup / ipv6group / ii / ip
 IKB_MODULE="${IKB_MODULE:-ii}"
-# IPv6 分组是否跟随服务自动同步（1=是）
+# IPv6 分组是否跟随服务自动同步（1=是，0=关）
 IKB_RUN_IPV6="${IKB_RUN_IPV6:-1}"
 # IPv6 分组的同步周期（秒，默认 24 小时）
 IKB_IPV6_INTERVAL="${IKB_IPV6_INTERVAL:-86400}"
@@ -28,44 +28,33 @@ warmup_cache() {
     fi
 }
 
-# 为什么单独跑：v4.2.0 的 -m 只有 ispdomain/ipgroup/ipv6group/ii/ip 五个值，
-# 没有「ii + IPv6」这种组合（4.4.x 才有 -m iip），所以 IPv6 分组用独立循环同步。
-start_ipv6_loop() {
-    [ "${IKB_RUN_IPV6}" = "0" ] && return 0
-    [ -f "${IPV6_PIDFILE}" ] && kill "$(cat "${IPV6_PIDFILE}" 2>/dev/null)" 2>/dev/null
-    (
-        while :; do
-            ${BIN_PATH} -r once -m ipv6group -c ${CONFIG_PATH} > ${IPV6_LOG} 2>&1
-            sleep "${IKB_IPV6_INTERVAL}"
-        done
-    ) &
-    echo $! > "${IPV6_PIDFILE}"
-}
-
-start() {
+# Why/为什么用 procd：早先用裸 & 在 init 脚本里起守护进程，开机收尾阶段会被
+# 连带回收（手动 start 正常、重启后 19001 不监听）。procd 托管既能活过启动收尾，
+# 也能在进程异常退出时自动拉起。
+start_service() {
     warmup_cache
-    if [ -x "${BIN_PATH}" ] && [ -f "${CONFIG_PATH}" ]; then
-        # 避免重复拉起进程
-        if pidof ikuai-bypass >/dev/null 2>&1; then
-            return 0
-        fi
-        # Why/为什么: v4.2.0 的分流模块由命令行 -m 决定（默认 ispdomain），
-        # 不传的话 ip 分组 / 下一跳规则根本不会被推送。ii = ispdomain + ipgroup。
-        ${BIN_PATH} -r cronAft -m "${IKB_MODULE}" -c ${CONFIG_PATH} > /dev/null 2>&1 &
-        start_ipv6_loop
+
+    [ -x "${BIN_PATH}" ] || return 1
+    [ -f "${CONFIG_PATH}" ] || return 1
+
+    # 主实例：分流同步守护进程（同时提供 19001 面板）
+    procd_open_instance main
+    procd_set_param command "${BIN_PATH}" -r cronAft -m "${IKB_MODULE}" -c "${CONFIG_PATH}"
+    procd_set_param respawn 3600 5 5
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_close_instance
+
+    # IPv6 实例：v4.2.0 没有「ii+IPv6」组合，单独循环，开机先跑一次再按周期
+    if [ "${IKB_RUN_IPV6}" != "0" ]; then
+        procd_open_instance ipv6
+        procd_set_param command /bin/sh -c \
+            "while :; do ${BIN_PATH} -r once -m ipv6group -c ${CONFIG_PATH} > ${IPV6_LOG} 2>&1; sleep ${IKB_IPV6_INTERVAL}; done"
+        procd_set_param respawn 3600 5 5
+        procd_close_instance
     fi
 }
 
-stop() {
-    if [ -f "${IPV6_PIDFILE}" ]; then
-        kill "$(cat "${IPV6_PIDFILE}" 2>/dev/null)" 2>/dev/null
-        rm -f "${IPV6_PIDFILE}"
-    fi
-    killall -q -9 ikuai-bypass 2>/dev/null
-}
-
-restart() {
-    stop
-    sleep 1
-    start
+service_triggers() {
+    procd_add_reload_trigger "ikuai-bypass"
 }
