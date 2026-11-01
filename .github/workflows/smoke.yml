@@ -65,14 +65,14 @@ jobs:
         run: |
           set -uo pipefail
           FAIL=0
-          grep -q '192\.168\.123\.2'                                   /tmp/smoke.log || { echo "::warning::没看到 192.168.123.2"; FAIL=1; }
-          grep -q 'IKUAIBYPASS_ENABLED'                                /tmp/smoke.log || { echo "::warning::ikuai-bypass 未开机自启"; FAIL=1; }
-          grep -q 'nexthop: 192\.168\.123\.2'                          /tmp/smoke.log || { echo "::warning::nexthop 不是 192.168.123.2"; FAIL=1; }
-          grep -q 'ikuai-url: http://192\.168\.123\.1'                  /tmp/smoke.log || { echo "::warning::ikuai-url 不是 192.168.123.1"; FAIL=1; }
-          grep -q 'SMOKE_END'                                          /tmp/smoke.log || { echo "::warning::命令序列没跑完（可能没登录成功）"; FAIL=1; }
+          grep -q '192\.168\.123\.2'                                   /tmp/smoke.log || { echo "::error::没看到 192.168.123.2"; FAIL=1; }
+          grep -q 'IKUAIBYPASS_ENABLED'                                /tmp/smoke.log || { echo "::error::ikuai-bypass 未开机自启"; FAIL=1; }
+          grep -q 'nexthop: 192\.168\.123\.2'                          /tmp/smoke.log || { echo "::error::nexthop 不是 192.168.123.2"; FAIL=1; }
+          grep -q 'ikuai-url: http://192\.168\.123\.1'                  /tmp/smoke.log || { echo "::error::ikuai-url 不是 192.168.123.1"; FAIL=1; }
+          grep -q 'SMOKE_END'                                          /tmp/smoke.log || { echo "::error::命令序列没跑完（可能没登录成功）"; FAIL=1; }
           grep -qi 'openclash'                                         /tmp/smoke.log || echo "::warning::没看到 openclash 包记录"
           grep -qi 'Illegal instruction'                               /tmp/smoke.log && echo "::warning::clash_meta 在当前 CPU 上报 Illegal instruction（如果 runner 不是 v3 指令集则属正常）"
-          if [ "$FAIL" = "1" ]; then echo "冒烟测试不通过"; echo "::warning::(仅提示，不阻断)"; fi
+          if [ "$FAIL" = "1" ]; then echo "冒烟测试不通过"; exit 1; fi
           echo "冒烟测试通过"
 
       - name: 保存串口日志
