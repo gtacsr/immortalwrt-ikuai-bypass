@@ -66,13 +66,11 @@ run "curl -s -o /dev/null -w CONFIG_API=%{http_code} http://127.0.0.1:19001/api/
 run {/etc/init.d/ikuai-bypass stop; sleep 1; ps w | grep "[i]kuai-bypass" | wc -l}
 run {/etc/init.d/ikuai-bypass start; sleep 8; ps w | grep "[i]kuai-bypass" | head -n 5}
 run {(ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo STILL_NO_PORT}
-run {sh -x /etc/init.d/ikuai-bypass start 2>&1 | tail -n 30}
-run {sh -x /etc/rc.common /etc/init.d/ikuai-bypass start 2>&1 | tail -n 45}
-run {IKB_RUN_IPV6=0 /etc/init.d/ikuai-bypass start; sleep 6; ps w | grep "[c]ronAft" | head -n 2; (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo NO_IPV6_VARIANT_PORT}
-run {logread 2>/dev/null | tail -n 8}
-run {sleep 5; ps w | grep "[c]ronAft" | head -n 3; (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo NO_PORT_AFTER_TRACE}
-run {head -n 4 /etc/rc.common}
-run {echo "SHELL=$SHELL"; ls -l /etc/init.d/ikuai-bypass}
+run {sh -x /etc/rc.common /etc/init.d/ikuai-bypass start > /tmp/trace.log 2>&1 & sleep 6; echo TRACE_RAN}
+run {ps w | grep "[c]ronAft" | head -n 2; (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo NO_PORT_TRACE}
+run {tail -n 40 /tmp/trace.log}
+
+
 run {/opt/ikuai-bypass/ikuai-bypass -r cronAft -m ii -c /opt/ikuai-bypass/config.yml > /tmp/ikb_fg.log 2>&1 & sleep 6; (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo FG_NO_PORT; head -n 6 /tmp/ikb_fg.log; killall -q ikuai-bypass}
 run {/opt/ikuai-bypass/ikuai-bypass -r cronAft -c /opt/ikuai-bypass/config.yml > /tmp/ikb_fg2.log 2>&1 & sleep 6; (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo FG2_NO_PORT; head -n 6 /tmp/ikb_fg2.log; killall -q ikuai-bypass}
 run "cat /var/run/ikuai-bypass-ipv6.pid"
