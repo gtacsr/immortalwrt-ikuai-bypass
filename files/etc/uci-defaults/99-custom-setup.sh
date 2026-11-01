@@ -1,6 +1,9 @@
 #!/bin/sh
-# 记录执行日志（可在 /tmp/setup.log 查看）
-exec >/tmp/setup.log 2>&1
+# 记录执行日志：写到 /root/setup.log（ext4 持久化，重启后仍在）
+# 说明：25.12 的首次开机脚本执行时机早于真正的 /tmp 挂载，写 /tmp 会丢，所以改 /root。
+mkdir -p /root
+exec >>/root/setup.log 2>&1
+echo "===== $(date '+%F %T') 首次开机初始化开始 ====="
 
 # ========================================================
 # 1. 旁路由参数设置（严格遵循 25.12 的 CIDR 规范）
@@ -82,5 +85,14 @@ if [ -f /etc/openclash/core/clash_meta ]; then
   chmod +x /etc/openclash/core/clash_meta
   ln -sf /etc/openclash/core/clash_meta /etc/openclash/core/clash 2>/dev/null || true
 fi
+
+# ========================================================
+# 9. 只跑一次：执行完自我删除，避免每次开机重跑覆盖手工配置
+# ========================================================
+echo "===== $(date '+%F %T') 初始化完成，删除首次开机脚本 ====="
+sync
+rm -f /etc/uci-defaults/99-custom-setup.sh
+[ -f /etc/uci-defaults/99-custom-setup.sh ] && echo "警告: 自删除失败，脚本可能仍会重复执行"
+echo "===== 完成 ====="
 
 exit 0
