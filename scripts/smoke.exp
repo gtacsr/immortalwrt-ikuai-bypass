@@ -61,14 +61,14 @@ run "grep -o IKB_MODULE /etc/init.d/ikuai-bypass | head -n 1"
 run {/opt/ikuai-bypass/ikuai-bypass -r once -m ii -c /opt/ikuai-bypass/config.yml > /tmp/ikb.out 2>&1 & sleep 8; killall -q ikuai-bypass; head -n 8 /tmp/ikb.out}
 run "grep -c . /tmp/ikb.out"
 run "grep -n 'enable-update' /opt/ikuai-bypass/config.yml"
+run {logread | grep -i ikuai | tail -n 15}
+run {ubus call service list '{"name":"ikuai-bypass"}' 2>&1 | head -c 800; echo}
 run "curl -s -o /dev/null -w PANEL=%{http_code} http://127.0.0.1:19001/"
 run "curl -s -o /dev/null -w CONFIG_API=%{http_code} http://127.0.0.1:19001/api/config"
 run {/etc/init.d/ikuai-bypass stop; sleep 1; ps w | grep "[i]kuai-bypass" | wc -l}
 run {/etc/init.d/ikuai-bypass start; sleep 8; ps w | grep "[i]kuai-bypass" | head -n 5}
 run {(ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo STILL_NO_PORT}
-run {sh -x /etc/rc.common /etc/init.d/ikuai-bypass start > /tmp/trace.log 2>&1 & sleep 6; echo TRACE_RAN}
 run {ps w | grep "[c]ronAft" | head -n 2; (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo NO_PORT_TRACE}
-run {tail -n 40 /tmp/trace.log}
 
 
 run {/opt/ikuai-bypass/ikuai-bypass -r cronAft -m ii -c /opt/ikuai-bypass/config.yml > /tmp/ikb_fg.log 2>&1 & sleep 6; (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo FG_NO_PORT; head -n 6 /tmp/ikb_fg.log; killall -q ikuai-bypass}
