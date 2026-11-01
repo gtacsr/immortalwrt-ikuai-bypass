@@ -133,6 +133,7 @@ jobs:
       - name: 注入 open-vm-tools（25.12 源已移除，取自 24.10 x86_64 源）
         run: |
           set -euo pipefail
+          IB="$GITHUB_WORKSPACE/ib"
           BASE="https://downloads.openwrt.org/releases/24.10.4/packages/x86_64/packages"
           rm -rf /tmp/omt && mkdir -p /tmp/omt && cd /tmp/omt
           curl -fsSL "$BASE/Packages.gz" -o P.gz && gunzip -f P.gz
@@ -147,18 +148,18 @@ jobs:
           done
 
           # 程序本体（排除它自带的 init 脚本，用我们仓库里的版本）
-          tar -C d-open-vm-tools -cf - --exclude=./etc/init.d/open-vm-tools . | tar -C ib/files -xf -
+          tar -C d-open-vm-tools -cf - --exclude=./etc/init.d/open-vm-tools . | tar -C "$IB/files" -xf -
 
           # 依赖库进私有目录，运行时用 LD_LIBRARY_PATH 指过去
-          mkdir -p ib/files/usr/lib/vmware-tools-libs
+          mkdir -p "$IB/files"/usr/lib/vmware-tools-libs
           for p in libtirpc libmspack libdnet; do
-            find "d-$p" -name '*.so*' -exec cp -a {} ib/files/usr/lib/vmware-tools-libs/ \;
+            find "d-$p" -name '*.so*' -exec cp -a {} "$IB/files"/usr/lib/vmware-tools-libs/ \;
           done
 
-          chmod +x ib/files/etc/init.d/open-vm-tools ib/files/usr/bin/vmtoolsd 2>/dev/null || true
-          echo "== vmtoolsd =="; ls -l ib/files/usr/bin/vmtoolsd || true
-          echo "== 私有依赖库 =="; ls -l ib/files/usr/lib/vmware-tools-libs || true
-          echo "== 配置文件 =="; ls -l ib/files/etc/vmware-tools 2>/dev/null | head -n 5 || true
+          chmod +x "$IB/files"/etc/init.d/open-vm-tools "$IB/files"/usr/bin/vmtoolsd 2>/dev/null || true
+          echo "== vmtoolsd =="; ls -l "$IB/files"/usr/bin/vmtoolsd || true
+          echo "== 私有依赖库 =="; ls -l "$IB/files"/usr/lib/vmware-tools-libs || true
+          echo "== 配置文件 =="; ls -l "$IB/files"/etc/vmware-tools 2>/dev/null | head -n 5 || true
 
       - name: 编译镜像（只出 ext4-combined-efi.img.gz）
         run: |
