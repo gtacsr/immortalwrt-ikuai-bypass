@@ -63,6 +63,11 @@ run "grep -c . /tmp/ikb.out"
 run "grep -n 'enable-update' /opt/ikuai-bypass/config.yml"
 run "curl -s -o /dev/null -w PANEL=%{http_code} http://127.0.0.1:19001/"
 run "curl -s -o /dev/null -w CONFIG_API=%{http_code} http://127.0.0.1:19001/api/config"
+run {/etc/init.d/ikuai-bypass stop; sleep 1; ps w | grep "[i]kuai-bypass" | wc -l}
+run {/etc/init.d/ikuai-bypass start; sleep 8; ps w | grep "[i]kuai-bypass" | head -n 5}
+run {(ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo STILL_NO_PORT}
+run {/opt/ikuai-bypass/ikuai-bypass -r cronAft -m ii -c /opt/ikuai-bypass/config.yml > /tmp/ikb_fg.log 2>&1 & sleep 6; (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo FG_NO_PORT; head -n 6 /tmp/ikb_fg.log; killall -q ikuai-bypass}
+run {/opt/ikuai-bypass/ikuai-bypass -r cronAft -c /opt/ikuai-bypass/config.yml > /tmp/ikb_fg2.log 2>&1 & sleep 6; (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep 19001 || echo FG2_NO_PORT; head -n 6 /tmp/ikb_fg2.log; killall -q ikuai-bypass}
 run "cat /var/run/ikuai-bypass-ipv6.pid"
 run "head -n 6 /tmp/ikuai-bypass-ipv6.log"
 run {kill -0 $(cat /var/run/ikuai-bypass-ipv6.pid) && echo IPV6_LOOP_ALIVE}
