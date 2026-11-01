@@ -89,10 +89,13 @@ stream-ipport:
 
 # ------------------------------------------------------------
 # WebUI：端口沿用 19001（4.2.0 默认是 19000）
+# enable-update: 面板上「保存配置」按钮的开关，缺这个键面板会显示
+# 「在线更新已禁用，请在设置中开启后再保存」并且按钮置灰
 # ------------------------------------------------------------
 webui:
   port: "19001"
   user: admin
   pass: ""
   enable: true
+  enable-update: true
   cdn-prefix: https://cdn.jsdelivr.net/npm
