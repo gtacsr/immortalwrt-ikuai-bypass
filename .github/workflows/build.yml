@@ -79,6 +79,20 @@ jobs:
           elif [ -f /tmp/ikuai-x/data.tar.zst ]; then tar --zstd -xf /tmp/ikuai-x/data.tar.zst -C ib/files/
           else echo "::error::LuCI ipk 解包失败"; ls -la /tmp/ikuai-x; exit 1; fi
 
+          # 前端：隐藏「安装/更新 CLI」与「升级插件」两个按钮（纯 CSS，不动 JS）
+          # 后端 guard_upgrade 已硬拦；这里只是不让人误点。
+          HTM=ib/files/usr/lib/lua/luci/view/ikuai_bypass/status.htm
+          if [ -f "$HTM" ]; then
+            perl -0pi -e 's|<script type="text/javascript">|<style>#ikb-install-btn,button[data-i18n="updatePlugin"]{display:none!important}</style>\n<script type="text/javascript">|' "$HTM"
+            if grep -q 'ikb-install-btn,button' "$HTM"; then
+              echo "前端：升级按钮已隐藏"
+            else
+              echo "::warning::前端按钮隐藏未生效（ipk 结构变化），后端拦截仍然有效"
+            fi
+          else
+            echo "::warning::未找到 status.htm，跳过前端隐藏"
+          fi
+
           curl -fsSL --retry 3 -o ib/files/opt/ikuai-bypass/install-cache/install.sh \
             "https://joyanhui.github.io/ikuai-bypass/install.sh" || true
           curl -fsSL --retry 3 -o ib/files/opt/ikuai-bypass/install-cache/install-file/common.sh \
