@@ -63,7 +63,7 @@ run "grep -c . /tmp/ikb.out"
 run "grep -o IKB_RUN_IPV6 /etc/init.d/ikuai-bypass | head -n 1"
 run "cat /var/run/ikuai-bypass-ipv6.pid"
 run "head -n 6 /tmp/ikuai-bypass-ipv6.log"
-run "kill -0 $(cat /var/run/ikuai-bypass-ipv6.pid) && echo IPV6_LOOP_ALIVE"
+run {kill -0 $(cat /var/run/ikuai-bypass-ipv6.pid) && echo IPV6_LOOP_ALIVE}
 run "/usr/libexec/ikuai-bypass-openwrt install 2>&1 | head -n 3"
 run "/usr/libexec/ikuai-bypass-openwrt luci-update 2>&1 | head -n 3"
 run "IKB_ALLOW_UPGRADE=0 /usr/libexec/ikuai-bypass-openwrt update 2>&1 | head -n 2"
