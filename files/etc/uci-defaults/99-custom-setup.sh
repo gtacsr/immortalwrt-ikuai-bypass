@@ -6,8 +6,13 @@ exec >/tmp/setup.log 2>&1
 # 1. 旁路由参数设置（严格遵循 25.12 的 CIDR 规范）
 # ========================================================
 lan_ip="192.168.123.2/24"    # 重点：带上 /24，杜绝 /32 单机掩码
-gateway_ip="192.168.0.1"   # 主路由 iKuai 的 IP
-dns_ip="192.168.0.1"       # DNS 指向 iKuai
+gateway_ip="192.168.123.1"   # 主路由 iKuai 的 IP
+dns_ip="192.168.123.1"       # DNS 指向 iKuai
+
+# 同网段自检：LAN 与网关不在同一个 /24 时旁路由没有默认路由（只记录告警，不阻断开机）
+lan_net="${lan_ip%%/*}"; lan_net="${lan_net%.*}"
+gw_net="${gateway_ip%.*}"
+[ "$lan_net" = "$gw_net" ] || echo "警告: LAN $lan_ip 与网关 $gateway_ip 不在同一 /24 网段，旁路由将无默认路由"
 
 # 密码为空，登录后提示用户设置密码
 passwd -d root >/dev/null 2>&1

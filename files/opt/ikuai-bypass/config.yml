@@ -1,4 +1,4 @@
-ikuai-url: http://192.168.0.1
+ikuai-url: http://192.168.123.1
 ikuai-url-ignore-cert: true
 username: admin
 password: ""
@@ -25,17 +25,17 @@ custom-isp:
 
 stream-domain:
   - interface: wan2
-    src-addr: 192.168.0.3-192.168.0.254
+    src-addr: 192.168.123.3-192.168.123.254
     src-addr-opt-ipgroup: ""
     url: https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/gfw.txt
     tag: gfw
   - interface: wan2
-    src-addr: 192.168.0.3-192.168.0.254
+    src-addr: 192.168.123.3-192.168.123.254
     src-addr-opt-ipgroup: ""
     url: https://raw.githubusercontent.com/joyanhui/ikuai-bypass/main/private/bypass-domain-list.txt
     tag: MyBypass
   - interface: wan1
-    src-addr: 192.168.0.3-192.168.0.254
+    src-addr: 192.168.123.3-192.168.123.254
     src-addr-opt-ipgroup: ""
     url: https://raw.githubusercontent.com/joyanhui/ikuai-bypass/main/private/direct-domain-list.txt
     tag: MyDirect
@@ -55,7 +55,7 @@ stream-ipport:
     opt-tagname: "国内流量"
     interface: wan1
     nexthop: ""
-    src-addr: 192.168.0.3-192.168.0.254
+    src-addr: 192.168.123.3-192.168.123.254
     src-addr-opt-ipgroup: ""
     src-addr-inv: 1
     ip-group: 国内
@@ -68,7 +68,7 @@ stream-ipport:
     opt-tagname: "负责分流到下一跳"
     interface: ""
     nexthop: 192.168.123.2
-    src-addr: 192.168.0.3-192.168.0.254
+    src-addr: 192.168.123.3-192.168.123.254
     src-addr-opt-ipgroup: ""
     src-addr-inv: 0
     ip-group: "Telegram"
